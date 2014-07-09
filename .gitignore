@@ -1,0 +1,9 @@
+[Bb]in/
+[Oo]bj/
+*.userprefs
+*.dll
+*.exe
+*.orig
+*.suo
+*.orig
+*.csproj.user
