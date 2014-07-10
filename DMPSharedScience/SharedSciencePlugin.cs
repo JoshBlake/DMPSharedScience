@@ -65,14 +65,12 @@ namespace DMPSharedScience
                 for (int i = 0; i < scenarioName.Length; i++)
                 {
                     string scenarioNodeName = scenarioName[i];
-                    if (scenarioNodeName == RDScenarioName)
-                    {
-                        Log("Syncing scenario module " + scenarioNodeName + " from " + client.playerName);
 
-                        SaveScenarioToInitialScenarioFolder(scenarioNodeName, scenarioData[i]);
-                        CopyScenarioFromInitialToAllUsers(scenarioNodeName);
-                        SendScenarioToOtherClients(scenarioNodeName, client);
-                    }
+                    Log("Syncing scenario module " + scenarioNodeName + " from " + client.playerName);
+
+                    SaveScenarioToInitialScenarioFolder(scenarioNodeName, scenarioData[i]);
+                    CopyScenarioFromInitialToAllUsers(scenarioNodeName);
+                    SendScenarioToOtherClients(scenarioNodeName, client);
                 }
             }
         }
@@ -150,7 +148,7 @@ namespace DMPSharedScience
 
         private string GetDefaultRDFile()
         {
-            string ret = @"scenarioNodeName = ResearchAndDevelopment
+            string ret = @"name = ResearchAndDevelopment
 scene = 5, 6, 7, 8, 9
 sci = 0
 Tech
