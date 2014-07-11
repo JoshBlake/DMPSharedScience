@@ -33,7 +33,6 @@ namespace DMPSharedScience
         public override void OnServerStart()
         {
             Log("Started.");
-            CreateDefaultScenarioModuleIfMissing(RDScenarioName);
         }
 
         public override void OnMessageReceived(ClientObject client, ClientMessage message)
@@ -84,9 +83,13 @@ namespace DMPSharedScience
 
         private void CopyScenarioFromInitialToAllUsers(string scenarioNodeName)
         {
-            CreateDefaultScenarioModuleIfMissing(scenarioNodeName);
-
             string initialFilePath = GetInitialScenarioFilePath(scenarioNodeName);
+
+            if (!File.Exists(initialFilePath))
+            {
+                return;
+            }
+
             string initialDirectory = Path.GetDirectoryName(initialFilePath);
 
             string filename = scenarioNodeName + ".txt";
@@ -126,17 +129,6 @@ namespace DMPSharedScience
             ClientHandler.SendToAll(fromClient, newMessage, false);
         }
 
-        private void CreateDefaultScenarioModuleIfMissing(string scenarioNodeName)
-        {
-            string initialFilePath = GetInitialScenarioFilePath(scenarioNodeName);
-
-            if (!File.Exists(initialFilePath))
-            {
-                Log("Creating default initial scenario for " + scenarioNodeName);
-                File.WriteAllText(initialFilePath, GetDefaultRDFile());
-            }
-        }
-
         private string GetInitialScenarioFilePath(string scenarioNodeName)
         {
             string filename = scenarioNodeName + ".txt";
@@ -144,28 +136,6 @@ namespace DMPSharedScience
             string initialFilePath = Path.Combine(Server.universeDirectory, ScenarioFolderName, InitialUserFolderName, filename);
 
             return initialFilePath;
-        }
-
-        private string GetDefaultRDFile()
-        {
-            string ret = @"name = ResearchAndDevelopment
-scene = 5, 6, 7, 8, 9
-sci = 0
-Tech
-{
-	id = start
-	state = Available
-	part = mk1pod
-	part = liquidEngine
-	part = solidBooster
-	part = fuelTankSmall
-	part = trussPiece1x
-	part = longAntenna
-	part = parachuteSingle
-}
-";
-
-            return ret;
         }
 
         private void Log(string message)
