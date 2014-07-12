@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using DarkMultiPlayerCommon;
 using DarkMultiPlayerServer;
@@ -16,6 +17,10 @@ namespace DMPSharedScience
         private const string RDScenarioName = "ResearchAndDevelopment";
         private const string ScenarioFolderName = "Scenarios";
         private const string InitialUserFolderName = "Initial";
+
+        private const string CONFIG_FILENAME = "SharedScenarios.cfg";
+
+        HashSet<string> sharedScenarioSet = new HashSet<string>();
 
         #endregion
 
@@ -33,6 +38,105 @@ namespace DMPSharedScience
         public override void OnServerStart()
         {
             Log("Started.");
+            
+            LoadSharedScenarios();
+            CommandHandler.RegisterCommand("scenario", ProcessSharedScenarioCommand, "Managed shared scenarios");
+        }
+
+        private void ProcessSharedScenarioCommand(string commandPart)
+        {
+            string argumentPart = "";
+
+            int firstSpaceIndex = commandPart.IndexOf(' ');
+            if (firstSpaceIndex > -1)
+            {
+                if (commandPart.Length > firstSpaceIndex + 1)
+                {
+                    argumentPart = commandPart.Substring(firstSpaceIndex + 1);
+                }
+                commandPart = commandPart.Substring(0, firstSpaceIndex);
+            }
+
+            argumentPart = argumentPart.ToLower();
+
+            switch (commandPart)
+            {
+                case "share":
+                    if (sharedScenarioSet.Add(argumentPart))
+                    {
+                        string msg = "Added shared scenario: " + argumentPart;
+                        Log(msg);
+                        ClientHandler.SendChatMessageToAll(msg);
+                    }
+                    else
+                    {
+                        string msg = "Cannot share, scenario is already shared: " + argumentPart;
+                        Log(msg);
+                    }
+                    SaveSharedScenarios();
+                    break;
+                case "unshare":
+                    if (sharedScenarioSet.Remove(argumentPart))
+                    {
+                        string msg = "Unshared scenario: " + argumentPart;
+                        Log(msg);
+                        ClientHandler.SendChatMessageToAll(msg);
+                    }
+                    else
+                    {
+                        string msg = "Cannot unshare, scenario was not being shared: " + argumentPart;
+                        Log(msg);
+                    }
+                    SaveSharedScenarios();
+                    break;
+                case "list":
+                default:
+                    string msg2 = "Currently sharing scenarios: ";
+                    foreach (var scenario in sharedScenarioSet)
+                    {
+                        msg2 += scenario + " ";
+                    }
+                    Log(msg2);
+                    break;
+            }
+        }
+
+        private void LoadSharedScenarios()
+        {
+            string path = Path.Combine(AssemblyDirectory, CONFIG_FILENAME);
+
+            if (File.Exists(path))
+            {
+                Log("Loading shared scenarios from " + CONFIG_FILENAME);
+                
+                string[] lines = File.ReadAllLines(path);
+                sharedScenarioSet.Clear();
+
+                foreach (var line in lines)
+                {
+                    sharedScenarioSet.Add(line.ToLower());
+                }
+            }
+            else
+            {
+                File.WriteAllText(path, "");
+            }
+        }
+
+        private void SaveSharedScenarios()
+        {
+            try
+            {
+                Log("Saving shared scenarios to " + CONFIG_FILENAME);
+                string[] lines = sharedScenarioSet.ToArray();
+
+                string path = Path.Combine(AssemblyDirectory, CONFIG_FILENAME);
+                File.WriteAllLines(path, lines);
+            }
+            catch (Exception ex)
+            {
+                Log("Exception saving shared scenarios to " + CONFIG_FILENAME + ": " + ex.ToString());
+            }
         }
 
         public override void OnMessageReceived(ClientObject client, ClientMessage message)
@@ -65,11 +169,14 @@ namespace DMPSharedScience
                 {
                     string scenarioNodeName = scenarioName[i];
 
-                    Log("Syncing scenario module " + scenarioNodeName + " from " + client.playerName);
+                    if (sharedScenarioSet.Contains(scenarioNodeName.ToLower()))
+                    {
+                        Log("Syncing scenario module " + scenarioNodeName + " from " + client.playerName);
 
-                    SaveScenarioToInitialScenarioFolder(scenarioNodeName, scenarioData[i]);
-                    CopyScenarioFromInitialToAllUsers(scenarioNodeName);
-                    SendScenarioToOtherClients(scenarioNodeName, client);
+                        SaveScenarioToInitialScenarioFolder(scenarioNodeName, scenarioData[i]);
+                        CopyScenarioFromInitialToAllUsers(scenarioNodeName);
+                        SendScenarioToOtherClients(scenarioNodeName, client);
+                    }
                 }
             }
         }
@@ -141,6 +248,16 @@ namespace DMPSharedScience
         private void Log(string message)
         {
             DarkLog.Debug("[SharedSciencePlugin] " + message);
+        }
+        static string AssemblyDirectory
+        {
+            get
+            {
+                string codeBase = Assembly.GetExecutingAssembly().CodeBase;
+                UriBuilder uri = new UriBuilder(codeBase);
+                string path = Uri.UnescapeDataString(uri.Path);
+                return Path.GetDirectoryName(path);
+            }
         }
 
         #endregion
