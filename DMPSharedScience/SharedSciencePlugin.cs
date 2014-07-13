@@ -40,8 +40,40 @@ namespace DMPSharedScience
             Log("Started.");
             
             LoadSharedScenarios();
+            foreach (var scenarioNodeName in sharedScenarioSet)
+            {
+
+                if (CopyScenarioFromInitialToAllUsers(scenarioNodeName))
+                {
+                    Log("Copying scenario module " + scenarioNodeName + " from Initial directory");
+                }
+                else
+                {
+                    Log("Warning: Scenario module " + scenarioNodeName + " does not exist in the Initial directory.");
+                }
+            }
+
             CommandHandler.RegisterCommand("scenario", ProcessSharedScenarioCommand, "Managed shared scenarios");
         }
+
+        public override void OnMessageReceived(ClientObject client, ClientMessage message)
+        {
+            if (!client.authenticated)
+            {
+                //Only handle authenticated messages
+                return;
+            }
+
+            if (message.type == ClientMessageType.SCENARIO_DATA)
+            {
+                HandleScenarioMessage(client, message);
+                message.handled = true;
+            }
+        }
+
+        #endregion
+
+        #region Private Methods
 
         private void ProcessSharedScenarioCommand(string commandPart)
         {
@@ -89,8 +121,10 @@ namespace DMPSharedScience
                     }
                     SaveSharedScenarios();
                     break;
+                case "resync":
+                    ResyncAllScenarios();
+                    break;
                 case "list":
-                default:
                     string msg2 = "Currently sharing scenarios: ";
                     foreach (var scenario in sharedScenarioSet)
                     {
@@ -98,6 +132,37 @@ namespace DMPSharedScience
                     }
                     Log(msg2);
                     break;
+                case "help":
+                default:
+                    Log("Try: /scenario share <scenarioname>, /scenario unshare <scenarioname>, /scenario list, /scenario resync");
+                    break;
+            }
+        }
+
+        private void ResyncAllScenarios()
+        {
+            string initialFolderPath = Path.Combine(Server.universeDirectory, ScenarioFolderName, InitialUserFolderName);
+
+            string[] files = Directory.GetFiles(initialFolderPath);
+
+            //we enumerate the files so we get the proper capitalization
+            foreach (var filePath in files)
+            {
+                string scenarioNodeName = Path.GetFileNameWithoutExtension(filePath);
+
+                if (IsScenarioModuleShared(scenarioNodeName))
+                {
+                    Log("Syncing scenario module " + scenarioNodeName + " from initial directory");
+
+                    if (CopyScenarioFromInitialToAllUsers(scenarioNodeName))
+                    {
+                        SendScenarioToOtherClients(scenarioNodeName, null);
+                    }
+                    else
+                    {
+                        Log("Warning: Scenario module " + scenarioNodeName + " does not exist in the Initial directory.");
+                    }
+                }
             }
         }
 
@@ -108,7 +173,7 @@ namespace DMPSharedScience
             if (File.Exists(path))
             {
                 Log("Loading shared scenarios from " + CONFIG_FILENAME);
-                
+
                 string[] lines = File.ReadAllLines(path);
                 sharedScenarioSet.Clear();
 
@@ -139,25 +204,6 @@ namespace DMPSharedScience
             }
         }
 
-        public override void OnMessageReceived(ClientObject client, ClientMessage message)
-        {
-            if (!client.authenticated)
-            {
-                //Only handle authenticated messages
-                return;
-            }
-
-            if (message.type == ClientMessageType.SCENARIO_DATA)
-            {
-                HandleScenarioMessage(client, message);
-                message.handled = true;
-            }
-        }
-
-        #endregion
-
-        #region Private Methods
-
         private void HandleScenarioMessage(ClientObject client, ClientMessage message)
         {
             using (MessageReader mr = new MessageReader(message.data, false))
@@ -169,16 +215,28 @@ namespace DMPSharedScience
                 {
                     string scenarioNodeName = scenarioName[i];
 
-                    if (sharedScenarioSet.Contains(scenarioNodeName.ToLower()))
+                    Log("Received scenario module " + scenarioNodeName + " from " + client.playerName);
+                    if (IsScenarioModuleShared(scenarioNodeName))
                     {
-                        Log("Syncing scenario module " + scenarioNodeName + " from " + client.playerName);
+                        Log("Syncing scenario module " + scenarioNodeName);
 
                         SaveScenarioToInitialScenarioFolder(scenarioNodeName, scenarioData[i]);
-                        CopyScenarioFromInitialToAllUsers(scenarioNodeName);
-                        SendScenarioToOtherClients(scenarioNodeName, client);
+                        if (CopyScenarioFromInitialToAllUsers(scenarioNodeName))
+                        {
+                            SendScenarioToOtherClients(scenarioNodeName, client);
+                        }
+                    }
+                    else
+                    {
+                        Log("Scenario module is not shared: " + scenarioNodeName);
                     }
                 }
             }
+        }
+
+        private bool IsScenarioModuleShared(string scenarioName)
+        {
+            return sharedScenarioSet.Contains(scenarioName.ToLower());
         }
 
         private void SaveScenarioToInitialScenarioFolder(string scenarioNodeName, string data)
@@ -188,13 +246,13 @@ namespace DMPSharedScience
             File.WriteAllText(initialFilepath, data);
         }
 
-        private void CopyScenarioFromInitialToAllUsers(string scenarioNodeName)
+        private bool CopyScenarioFromInitialToAllUsers(string scenarioNodeName)
         {
             string initialFilePath = GetInitialScenarioFilePath(scenarioNodeName);
 
             if (!File.Exists(initialFilePath))
             {
-                return;
+                return false;
             }
 
             string initialDirectory = Path.GetDirectoryName(initialFilePath);
@@ -211,6 +269,8 @@ namespace DMPSharedScience
                     File.Copy(initialFilePath, userFilePath, true);
                 }
             }
+
+            return true;
         }
 
         private void SendScenarioToOtherClients(string scenarioNodeName, ClientObject fromClient)
@@ -219,6 +279,10 @@ namespace DMPSharedScience
             string[] scenarioDataArray = new string[1];
 
             string initialFilePath = GetInitialScenarioFilePath(scenarioNodeName);
+            if (!File.Exists(initialFilePath))
+            {
+                return;
+            }
             string scenarioData = File.ReadAllText(initialFilePath);
 
             scenarioNameArray[0] = scenarioNodeName;
